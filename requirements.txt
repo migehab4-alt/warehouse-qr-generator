@@ -1,0 +1,6 @@
+pandas
+openpyxl
+qrcode[pil]
+reportlab
+pillow
+watchdog
