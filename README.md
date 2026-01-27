@@ -1,0 +1,1 @@
+# warehouse-qr-generator
