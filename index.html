@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task 2: Monthly Sales, Off-Plan vs. Existing Properties</title>
+<script src="https://cdn.jsdelivr.net/npm/vega@5.30.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/vega-lite@5.21.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/vega-embed@6.26.0"></script>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #222; line-height: 1.55; }
+  .answer { background: #f4f7fb; border-left: 4px solid #4c78a8; padding: .8rem 1rem; }
+  .method { background: #fafafa; border: 1px solid #e3e6ea; border-radius: 6px; padding: .6rem 1.2rem; }
+  .method li { margin: .35rem 0; }
+  code { background: #eef1f5; padding: 1px 5px; border-radius: 3px; overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+
+<h2>Task 2: Monthly Sales, Off-Plan vs. Existing Properties</h2>
+<p>Number of sales registered per month at the Dubai Land Department, shown separately for
+off-plan properties and existing properties, from 1 January 2015 to 31 August 2026 (both included).
+Only transactions whose group is <em>Sales</em> are counted. Months are computed in UTC, so the chart
+looks the same in every time zone. Months with no sales are drawn as 0 instead of being skipped.</p>
+
+<div id="chart2"></div>
+
+<p id="answer2" class="answer">
+  <strong>Question:</strong> In which month is the number of off-plan sales the highest, and how many off-plan sales is it?<br>
+  <strong>Answer:</strong> <span id="answer2-text">Calculating from the data...</span>
+</p>
+
+<h3>How to read the chart</h3>
+<p>The horizontal axis shows the months (labels mark January of each year) and the vertical axis shows the
+number of registered sales in that month. The orange line is off-plan properties and the blue line is
+existing properties. The red point with a label marks the month with the highest off-plan sales.
+Hover over any point to see the month, the property type and the exact number of sales.</p>
+
+<h3>Interpretation</h3>
+<p id="interpretation2">The interpretation is written after the data has loaded...</p>
+
+<h3>Data source and method</h3>
+<p>Data: Dubai Land Department transactions, loaded directly by Vega-Lite from
+<a href="https://raw.githubusercontent.com/sharios/CS333/main/2026-27/Part%202/transactions.csv" target="_blank" rel="noopener noreferrer">the course CSV on GitHub</a>.</p>
+<ol class="method">
+  <li><strong>Date type:</strong> <code>instance_date</code> is parsed as a UTC date, so a month never changes with the viewer's time zone.</li>
+  <li><strong>Window:</strong> only dates from 1 January 2015 up to and including 31 August 2026.</li>
+  <li><strong>Sales only:</strong> only rows where <code>trans_group_en</code> is <code>Sales</code>.</li>
+  <li><strong>Two categories:</strong> <code>reg_type_en</code> separates <code>Off-Plan Properties</code> from <code>Existing Properties</code>; other values are ignored.</li>
+  <li><strong>Monthly count:</strong> each qualifying row adds one sale to its UTC month and category.</li>
+  <li><strong>Missing months:</strong> a month with no sales is added with a count of 0 for each category (impute), so the lines cover all 140 months without gaps.</li>
+  <li><strong>Peak:</strong> the highest off-plan month is found from the monthly counts, highlighted on the chart and written in the answer box above.</li>
+</ol>
+
+<script>
+// ---------- constants for Task 2 ----------
+const CSV_URL_2 = "https://raw.githubusercontent.com/sharios/CS333/main/2026-27/Part%202/transactions.csv";
+const OFF_PLAN = "Off-Plan Properties";
+const EXISTING = "Existing Properties";
+
+// Every month of the analysis window as "YYYY-MM": 2015-01 ... 2026-08 (140 months).
+const MONTH_KEYS_2 = [];
+for (let y = 2015; y <= 2026; y++) {
+  for (let m = 1; m <= 12; m++) {
+    if (y === 2026 && m > 8) break;
+    MONTH_KEYS_2.push(y + "-" + String(m).padStart(2, "0"));
+  }
+}
+
+// ---------- Vega-Lite specification ----------
+const spec2 = {
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "width": 650,
+  "height": 380,
+  "title": "Monthly sales: off-plan vs existing properties (1 Jan 2015 - 31 Aug 2026)",
+  "data": {
+    "url": CSV_URL_2,
+    "format": {
+      "type": "csv",
+      "parse": { "instance_date": "utc:'%Y-%m-%d'" }
+    }
+  },
+  "transform": [
+    // 1. analysis window + sales only + the two required property types
+    { "filter": "datum.instance_date >= utc(2015,0,1) && datum.instance_date < utc(2026,8,1) && datum.trans_group_en === 'Sales' && (datum.reg_type_en === 'Off-Plan Properties' || datum.reg_type_en === 'Existing Properties')" },
+    // 2. month key in UTC, e.g. "2019-03"
+    { "calculate": "utcFormat(datum.instance_date, '%Y-%m')", "as": "ym" },
+    // 3. count sales per month and type
+    { "aggregate": [{ "op": "count", "as": "sales" }], "groupby": ["ym", "reg_type_en"] },
+    // 4. add the missing months with 0 so the lines never skip a month
+    { "impute": "sales", "key": "ym", "keyvals": MONTH_KEYS_2, "groupby": ["reg_type_en"], "value": 0 },
+    // 5. back to real dates (UTC) for the time axis + a readable label for tooltips
+    { "calculate": "utcParse(datum.ym, '%Y-%m')", "as": "month" },
+    { "calculate": "utcFormat(datum.month, '%B %Y')", "as": "monthLabel" }
+  ],
+  "encoding": {
+    "x": {
+      "field": "month", "type": "temporal",
+      "scale": { "type": "utc", "domain": [Date.UTC(2014, 11, 15), Date.UTC(2026, 7, 20)] },
+      "axis": {
+        "title": "Month",
+        "format": "%Y",
+        "tickCount": { "interval": "utcyear", "step": 1 },
+        "labelAngle": 0,
+        "grid": true,
+        "gridOpacity": 0.4
+      }
+    },
+    "y": {
+      "field": "sales", "type": "quantitative",
+      "scale": { "zero": true, "nice": true },
+      "axis": { "title": "Number of sales per month", "format": ",.0f", "grid": true }
+    },
+    "color": {
+      "field": "reg_type_en", "type": "nominal",
+      "scale": { "domain": [OFF_PLAN, EXISTING], "range": ["#f58518", "#4c78a8"] },
+      "legend": { "title": "Property type" }
+    }
+  },
+  "layer": [
+    // line for each type
+    { "mark": { "type": "line", "strokeWidth": 2 } },
+    // small points + tooltip on every month
+    {
+      "mark": { "type": "point", "filled": true, "size": 22 },
+      "encoding": {
+        "tooltip": [
+          { "field": "monthLabel", "type": "nominal", "title": "Month" },
+          { "field": "reg_type_en", "type": "nominal", "title": "Property type" },
+          { "field": "sales", "type": "quantitative", "title": "Number of sales", "format": ",.0f" }
+        ]
+      }
+    },
+    // red highlighted point on the peak off-plan month
+    {
+      "transform": [
+        { "joinaggregate": [{ "op": "max", "field": "sales", "as": "maxSales" }], "groupby": ["reg_type_en"] },
+        { "filter": "datum.reg_type_en === 'Off-Plan Properties' && datum.sales === datum.maxSales" }
+      ],
+      "mark": { "type": "point", "filled": true, "size": 160, "stroke": "white", "strokeWidth": 2 },
+      "encoding": {
+        "color": { "value": "#b42318" },
+        "tooltip": [
+          { "field": "monthLabel", "type": "nominal", "title": "Peak off-plan month" },
+          { "field": "sales", "type": "quantitative", "title": "Number of sales", "format": ",.0f" }
+        ]
+      }
+    },
+    // text label for the peak
+    {
+      "transform": [
+        { "joinaggregate": [{ "op": "max", "field": "sales", "as": "maxSales" }], "groupby": ["reg_type_en"] },
+        { "filter": "datum.reg_type_en === 'Off-Plan Properties' && datum.sales === datum.maxSales" },
+        { "calculate": "'Peak: ' + datum.monthLabel + ' (' + format(datum.sales, ',') + ' sales)'", "as": "peakLabel" }
+      ],
+      "mark": { "type": "text", "align": "right", "dx": -12, "dy": -4, "fontSize": 12, "fontWeight": "bold" },
+      "encoding": {
+        "color": { "value": "#b42318" },
+        "text": { "field": "peakLabel", "type": "nominal" }
+      }
+    }
+  ]
+};
+
+// ---------- Draw the chart, then write the answer from the chart's own data ----------
+const MONTH_NAMES_2 = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+function niceMonth2(d) {            // d is a Date at the start of a UTC month
+  return MONTH_NAMES_2[d.getUTCMonth()] + " " + d.getUTCFullYear();
+}
+
+function findMonthlyRows2(view, vgSpec) {
+  // The monthly table (140 months x 2 types) is one of the datasets Vega-Lite creates.
+  // Pick the largest dataset that has sales + type + month and is NOT the peak-only layer.
+  let best = null;
+  for (const ds of (vgSpec.data || [])) {
+    let rows;
+    try { rows = view.data(ds.name); } catch (e) { continue; }
+    if (!rows || !rows.length) continue;
+    const r = rows[0];
+    if (r.sales === undefined || r.reg_type_en === undefined || r.month === undefined) continue;
+    if (r.maxSales !== undefined) continue;
+    if (!best || rows.length > best.length) best = rows;
+  }
+  return best;
+}
+
+vegaEmbed('#chart2', spec2, { actions: false }).then(async function (result) {
+  const box = document.getElementById('answer2-text');
+  const interp = document.getElementById('interpretation2');
+  try {
+    await result.view.runAsync();
+    const rows = findMonthlyRows2(result.view, result.vgSpec);
+    if (!rows) throw new Error("monthly data not found");
+
+    let maxOff = -1, peakMonths = [], totalOff = 0, totalEx = 0, maxEx = -1, exMonths = [];
+    for (const r of rows) {
+      const d = new Date(r.month);
+      if (r.reg_type_en === OFF_PLAN) {
+        totalOff += r.sales;
+        if (r.sales > maxOff) { maxOff = r.sales; peakMonths = [d]; }
+        else if (r.sales === maxOff) peakMonths.push(d);
+      } else if (r.reg_type_en === EXISTING) {
+        totalEx += r.sales;
+        if (r.sales > maxEx) { maxEx = r.sales; exMonths = [d]; }
+        else if (r.sales === maxEx) exMonths.push(d);
+      }
+    }
+    const fmt = n => n.toLocaleString("en-US");
+    const names = arr => arr.sort((a, b) => a - b).map(niceMonth2).join(" and ");
+    const peakText = names(peakMonths);
+
+    box.innerHTML =
+      "The highest number of off-plan sales was in <strong>" + peakText +
+      "</strong>, with <strong>" + fmt(maxOff) + "</strong> off-plan sales" +
+      (peakMonths.length > 1 ? " in each of these months" : "") + ".<br>" +
+      "<small>For context: off-plan sales in the whole window = " + fmt(totalOff) +
+      "; existing-property sales = " + fmt(totalEx) +
+      "; the busiest month for existing properties was " + names(exMonths) +
+      " with " + fmt(maxEx) + " sales.</small>";
+
+    const share = Math.round(100 * totalOff / (totalOff + totalEx));
+    interp.textContent =
+      "Between January 2015 and August 2026 the peak for off-plan sales was " + fmt(maxOff) +
+      " sales in " + peakText + ". Over the whole period " + fmt(totalOff) +
+      " off-plan sales and " + fmt(totalEx) + " existing-property sales were registered, so off-plan sales are about " +
+      share + "% of all sales in the two categories. Comparing the two lines shows when each category was most active " +
+      "and how differently they moved from one month to the next.";
+  } catch (e) {
+    box.textContent = "The answer could not be calculated. Please reload the page.";
+    interp.textContent = "The interpretation could not be written because the data did not load.";
+    console.error(e);
+  }
+}).catch(function (err) {
+  document.getElementById('answer2-text').textContent = "The chart could not be loaded. Please reload the page.";
+  document.getElementById('interpretation2').textContent = "The interpretation could not be written because the data did not load.";
+  console.error(err);
+});
+</script>
+</body>
+</html>
